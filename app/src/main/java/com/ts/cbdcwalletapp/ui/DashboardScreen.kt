@@ -135,6 +135,11 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                     icon = Icons.Default.ArrowForward,
                     onClick = { showTransferDialog = true }
                 )
+                ActionButton(
+                    text = "Offline",
+                    icon = Icons.Default.Share,
+                    onClick = { navController.navigate(Screen.OfflineTransfer.route) }
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))

@@ -135,6 +135,33 @@ class MainViewModel(private val repository: Repository, private val tokenManager
             }
         }
     }
+
+    // Offline Transfer Logic (MVP: Local update only)
+    fun deductBalance(amount: Double) {
+        val currentState = _walletState.value
+        if (currentState is WalletState.Success) {
+            val currentWallet = currentState.wallet
+            if (currentWallet.balance >= amount) {
+                val newBalance = currentWallet.balance - amount
+                // Create a copy of the wallet with the new balance
+                val updatedWallet = currentWallet.copy(balance = newBalance)
+                 _walletState.value = WalletState.Success(updatedWallet)
+            } else {
+                 _walletState.value = WalletState.Error("Insufficient funds for offline transfer")
+            }
+        }
+    }
+
+    fun addBalance(amount: Double) {
+         val currentState = _walletState.value
+        if (currentState is WalletState.Success) {
+            val currentWallet = currentState.wallet
+            val newBalance = currentWallet.balance + amount
+             // Create a copy of the wallet with the new balance
+            val updatedWallet = currentWallet.copy(balance = newBalance)
+             _walletState.value = WalletState.Success(updatedWallet)
+        }
+    }
 }
 
 sealed class AuthState {

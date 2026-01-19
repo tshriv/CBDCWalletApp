@@ -49,6 +49,9 @@ class MainActivity : ComponentActivity() {
                         composable(Screen.Dashboard.route) {
                             DashboardScreen(navController, viewModel)
                         }
+                        composable(Screen.OfflineTransfer.route) {
+                            OfflineTransferScreen(navController, viewModel, tokenManager.getUser())
+                        }
                     }
                 }
             }
