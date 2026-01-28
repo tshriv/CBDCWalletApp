@@ -137,6 +137,20 @@ class MainViewModel(private val repository: Repository, private val tokenManager
     }
 
     // Offline Transfer Logic (MVP: Local update only)
+    
+    // Shared state between Dashboard Dialog and Offline Screen
+    data class OfflineTransferState(
+        val isSender: Boolean = false,
+        val transferAmount: Double = 0.0
+    )
+
+    private val _offlineTransferState = MutableStateFlow(OfflineTransferState())
+    val offlineTransferState: StateFlow<OfflineTransferState> = _offlineTransferState
+
+    fun startOfflineTransfer(isSender: Boolean, amount: Double = 0.0) {
+        _offlineTransferState.value = OfflineTransferState(isSender, amount)
+    }
+
     fun deductBalance(amount: Double) {
         val currentState = _walletState.value
         if (currentState is WalletState.Success) {

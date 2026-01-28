@@ -30,6 +30,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
     val currentUserId = (authState as? AuthState.Success)?.user?.userId
     var showLoadDialog by remember { mutableStateOf(false) }
     var showTransferDialog by remember { mutableStateOf(false) }
+    var showOfflineDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.getBalance()
@@ -102,12 +103,14 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                         Spacer(modifier = Modifier.height(8.dp))
                         if (walletState is WalletState.Success) {
                             val wallet = (walletState as WalletState.Success).wallet
-                            val currency = wallet.currency ?: "CBDC" // Fix: Handle null currency
+                            val currency = wallet.currency ?: "₹" // Fix: Handle null currency
                             Text(
                                 text = "$currency ${wallet.balance}",
-                                style = MaterialTheme.typography.displayMedium,
+                                style = MaterialTheme.typography.headlineLarge,
                                 color = Color.White,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                         } else if (walletState is WalletState.Loading) {
                             CircularProgressIndicator(color = Color.White)
@@ -138,7 +141,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                 ActionButton(
                     text = "Offline",
                     icon = Icons.Default.Share,
-                    onClick = { navController.navigate(Screen.OfflineTransfer.route) }
+                    onClick = { showOfflineDialog = true } // Show dialog instead of direct nav
                 )
             }
 
@@ -199,6 +202,17 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
             onConfirm = { phone, amount ->
                 viewModel.transferFunds(phone, amount)
                 showTransferDialog = false
+            }
+        )
+    }
+
+    if (showOfflineDialog) {
+        OfflineSetupDialog(
+            onDismiss = { showOfflineDialog = false },
+            onStartTransfer = { isSender, amount ->
+                viewModel.startOfflineTransfer(isSender, amount)
+                showOfflineDialog = false
+                navController.navigate(Screen.OfflineTransfer.route)
             }
         )
     }
@@ -342,6 +356,74 @@ fun TransferFundsDialog(onDismiss: () -> Unit, onConfirm: (String, Double) -> Un
                 }
             }) {
                 Text("Transfer")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun OfflineSetupDialog(
+    onDismiss: () -> Unit,
+    onStartTransfer: (Boolean, Double) -> Unit
+) {
+    var step by remember { mutableStateOf(1) } // 1: Role Selection, 2: Amount Input
+    var amount by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (step == 1) "Select Role" else "Enter Amount") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (step == 1) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        Button(onClick = { 
+                            // Receiver goes straight to start
+                            onStartTransfer(false, 0.0) 
+                        }) {
+                            Text("Receive")
+                        }
+                        
+                        Button(onClick = { 
+                            // Sender goes to amount input
+                            step = 2 
+                        }) {
+                            Text("Send")
+                        }
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { 
+                             if (it.all { char -> char.isDigit() || char == '.' }) amount = it
+                        },
+                        label = { Text("Amount (₹)") },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (step == 2) {
+                Button(onClick = {
+                    val amt = amount.toDoubleOrNull()
+                    if (amt != null && amt > 0) {
+                        onStartTransfer(true, amt)
+                    }
+                }) {
+                    Text("Next")
+                }
             }
         },
         dismissButton = {

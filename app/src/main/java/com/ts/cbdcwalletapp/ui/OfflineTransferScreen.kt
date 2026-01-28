@@ -109,11 +109,36 @@ fun OfflineTransferContent(
         amountToSend = ""
     }
 
+    val offlineState by viewModel.offlineTransferState.collectAsState()
+
+    // Initialize based on retained state from Dashboard Dialog
+    LaunchedEffect(Unit) {
+        if (offlineState.isSender) {
+            isSender = true
+            isReceiver = false
+            transferAmount = offlineState.transferAmount
+            currentStep = TransferStep.REQUEST
+            statusMessage = "Scanning for Receiver..."
+        } else {
+            isReceiver = true
+            isSender = false
+            // Generate REQUEST QR immediately for receiver
+            val req = OfflineRequest(
+                to = currentUser?.phoneNumber ?: currentUser?.userId ?: "unknown"
+            )
+            qrContent = TransferProtocol.toJson(req)
+            statusMessage = "Show this QR to Sender"
+            currentStep = TransferStep.REQUEST
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(16.dp)
+            .systemBarsPadding(), // Fix: Avoid status bar overlap
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center // Fix: Center content vertically
     ) {
 
         Text(
@@ -122,62 +147,10 @@ fun OfflineTransferContent(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 16.dp)
         )
+        
+        // No selection UI needed anymore, as it's handled by Dashboard Dialog
 
-        if (!isReceiver && !isSender) {
-            // Role Selection
-            Text(
-                "Select your role for this transaction",
-                style = MaterialTheme.typography.bodyLarge
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Amount Input for potential Sender
-            OutlinedTextField(
-                value = amountToSend,
-                onValueChange = {
-                    if (it.all { char -> char.isDigit() || char == '.' }) amountToSend = it
-                },
-                label = { Text("Amount to Send ($)") },
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 32.dp)
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                Button(onClick = {
-                    val amt = amountToSend.toDoubleOrNull()
-                    if (amt != null && amt > 0) {
-                        transferAmount = amt
-                        isSender = true
-                        statusMessage = "Scanning for Receiver..."
-                        currentStep = TransferStep.REQUEST // Sender starts by scanning REQUEST
-                    } else {
-                        Toast.makeText(context, "Please enter a valid amount", Toast.LENGTH_SHORT)
-                            .show()
-                    }
-                }) {
-                    Text("Send Money")
-                }
-
-                Button(onClick = {
-                    isReceiver = true
-                    // Generate REQUEST QR
-                    val req = OfflineRequest(
-                        to = currentUser?.phoneNumber ?: currentUser?.userId ?: "unknown"
-                    )
-                    qrContent = TransferProtocol.toJson(req)
-                    statusMessage = "Show QR to Sender"
-                    currentStep = TransferStep.REQUEST // Receiver starts by showing REQUEST
-                }) {
-                    Text("Receive Money")
-                }
-            }
-        } else if (currentStep == TransferStep.SUCCESS) {
+        if (currentStep == TransferStep.SUCCESS) {
             // SUCCESS UI
             Column(
                 modifier = Modifier.fillMaxSize(),
@@ -193,13 +166,13 @@ fun OfflineTransferContent(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = if (isSender) "Sent $$transferAmount successfully." else "Received $$transferAmount successfully.",
+                    text = if (isSender) "Sent ₹$transferAmount successfully." else "Received ₹$transferAmount successfully.",
                     style = MaterialTheme.typography.bodyLarge
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // If Receiver, show SUCCESS QR so Sender can also see success
+                // If Receiver, show SUCCESS QR so Sender will also show success
                 if (isReceiver) {
                     qrContent?.let { content ->
                         val bitmap = QRUtils.generateQRCode(content)
@@ -246,15 +219,23 @@ fun OfflineTransferContent(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = if (isSender) "My Role: Sender ($$transferAmount)" else "My Role: Receiver",
+                            text = if (isSender) "My Role: Sender (₹$transferAmount)" else "My Role: Receiver",
                             style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center, // Fix: Center align text
+                            modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(modifier = Modifier.height(8.dp))
 
                         if (qrContent != null) {
+
+                            Log.d("@@@", "Creating QR bitmap ")
+
                             val bitmap = QRUtils.generateQRCode(qrContent!!)
+                            Log.d("@@@", "Qr bitmap created ")
                             if (bitmap != null) {
+                                Log.d("@@@", "Qr bitmap not null ")
+
                                 Image(
                                     bitmap = bitmap.asImageBitmap(),
                                     contentDescription = "QR Code",
@@ -270,6 +251,7 @@ fun OfflineTransferContent(
                                 )
                             }
                         } else {
+                            Log.d("@@@", "Qr bitmap null ")
                             Box(
                                 modifier = Modifier.size(280.dp),
                                 contentAlignment = Alignment.Center
@@ -320,6 +302,8 @@ fun OfflineTransferContent(
                                 when {
                                     // SENDER: Use Step 1 (Scan REQUEST), Generate Step 2 (Show INIT)
                                     isSender && currentStep == TransferStep.REQUEST && message.type == TransferStep.REQUEST -> {
+                                        Log.d("@@@", "OfflineTransferContent: Scan 1 -  scanning request by sender ")
+                                        Log.d("@@@", "scanned Data: $scannedData ")
                                         isProcessingScan = true
                                         val req = TransferProtocol.parseRequest(scannedData)
                                         if (req != null) {
@@ -338,12 +322,21 @@ fun OfflineTransferContent(
                                                     to = otherDeviceId,
                                                     amount = transferAmount
                                                 )
+                                                Log.d("@@@", "generating QR content ")
                                                 qrContent = TransferProtocol.toJson(initMsg)
-                                                statusMessage = "Initializing..."
+                                                Log.d("@@@", " QR content is $qrContent ")
+
+                                                statusMessage = "Initialized! Show this to Receiver"
                                                 currentStep = TransferStep.INIT
                                                 isProcessingScan = false
                                             } else {
-                                                // Handle Error
+                                                // Handle Error - Insufficient Funds
+                                                statusMessage = "Insufficient Funds!"
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    "Insufficient funds: Balance ${currentBalance} < Amount ${transferAmount}",
+                                                    android.widget.Toast.LENGTH_LONG
+                                                ).show()
                                                 isProcessingScan = false
                                             }
                                         } else {
@@ -364,7 +357,7 @@ fun OfflineTransferContent(
 
                                             val ackMsg = OfflineAck(tx_id = transactionId)
                                             qrContent = TransferProtocol.toJson(ackMsg)
-                                            statusMessage = "Confirming..."
+                                            statusMessage = "Confirmed! Show this to Sender"
                                             currentStep = TransferStep.ACK
                                             isProcessingScan = false
                                         } else {
@@ -381,7 +374,7 @@ fun OfflineTransferContent(
 
                                             val commitMsg = OfflineCommit(tx_id = transactionId)
                                             qrContent = TransferProtocol.toJson(commitMsg)
-                                            statusMessage = "Finalizing..."
+                                            statusMessage = "Finalized! Show this to Receiver"
                                             currentStep = TransferStep.COMMIT
                                             isProcessingScan = false
                                         } else {
@@ -496,8 +489,9 @@ fun OfflineTransferContent(
 
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { reset() },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                onClick = { navController.popBackStack() }, // Fix: Navigate back instead of resetting local state
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.align(Alignment.CenterHorizontally) // Fix: Center align button
             ) {
                 Text("Cancel Transaction")
             }

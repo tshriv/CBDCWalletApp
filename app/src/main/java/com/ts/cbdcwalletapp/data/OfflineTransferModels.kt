@@ -20,6 +20,8 @@ data class OfflineRequest(
 )
 
 // STEP 2: Sender scans REQUEST, shows this
+/** will check if amount available
+ * **/
 data class OfflineInit(
     val type: TransferStep = TransferStep.INIT,
     val tx_id: String,
@@ -48,6 +50,8 @@ data class OfflineSuccess(
     val tx_id: String,
     val message: String = "SUCCESS"
 )
+//Step 6: Sender scans SUCCESS, shows its own SUCCESS Screen
+/** after this sender scan SUCCESS and shows its own SUCCESS Screen **/
 
 object TransferProtocol {
     private val gson = Gson()
